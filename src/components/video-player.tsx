@@ -1,12 +1,6 @@
 "use client";
 
-import {
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-  type PointerEvent as ReactPointerEvent,
-} from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ExternalLink,
   Loader2,
@@ -19,7 +13,7 @@ import {
   Volume2,
   VolumeX,
 } from "lucide-react";
-import { driveViewUrl } from "@/lib/drive";
+import { drivePreviewUrl, driveViewUrl } from "@/lib/drive";
 import { cn } from "@/lib/utils";
 
 interface VideoPlayerProps {
@@ -28,6 +22,8 @@ interface VideoPlayerProps {
   initialPosition?: number;
   onProgress?: (seconds: number, completed: boolean) => void;
 }
+
+type Mode = "checking" | "native" | "drive";
 
 function formatTime(seconds: number): string {
   if (!Number.isFinite(seconds) || seconds < 0) return "0:00";
@@ -44,22 +40,49 @@ function drivePosterUrl(fileId: string): string {
   return `https://drive.google.com/thumbnail?id=${fileId}&sz=w1280`;
 }
 
-export function VideoPlayer({
+function DriveEmbed({ driveFileId }: { driveFileId: string }) {
+  return (
+    <div className="w-full min-w-0 max-w-full space-y-2">
+      <div className="relative aspect-video w-full overflow-hidden rounded-xl bg-black">
+        <iframe
+          title="Lesson recording"
+          src={`${drivePreviewUrl(driveFileId)}?usp=drivesdk`}
+          className="absolute inset-0 h-full w-full border-0"
+          allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
+          allowFullScreen
+          referrerPolicy="strict-origin-when-cross-origin"
+        />
+      </div>
+      <div className="flex justify-end">
+        <a
+          href={driveViewUrl(driveFileId)}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-1 text-xs text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+        >
+          <ExternalLink className="h-3 w-3" />
+          Open in Drive
+        </a>
+      </div>
+    </div>
+  );
+}
+
+function NativePlayer({
   partId,
   driveFileId,
   initialPosition = 0,
   onProgress,
-}: VideoPlayerProps) {
+  onStreamFailed,
+}: VideoPlayerProps & { onStreamFailed: () => void }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const hideTimerRef = useRef<number | null>(null);
   const lastSyncRef = useRef(0);
   const hasSeekedRef = useRef(false);
-  const dragProgressRef = useRef<number | null>(null);
+  const failedRef = useRef(false);
 
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [retryCount, setRetryCount] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [muted, setMuted] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
@@ -69,19 +92,24 @@ export function VideoPlayer({
   const [scrubbing, setScrubbing] = useState(false);
   const [scrubTime, setScrubTime] = useState(0);
 
-  const streamUrl = `/api/stream/part/${partId}${retryCount > 0 ? `?retry=${retryCount}` : ""}`;
+  const streamUrl = `/api/stream/part/${partId}`;
   const posterUrl = drivePosterUrl(driveFileId);
-  const driveOpenUrl = driveViewUrl(driveFileId);
   const displayTime = scrubbing ? scrubTime : currentTime;
   const progressPercent =
     duration > 0 ? Math.min(100, Math.max(0, (displayTime / duration) * 100)) : 0;
+
+  const failOver = useCallback(() => {
+    if (failedRef.current) return;
+    failedRef.current = true;
+    onStreamFailed();
+  }, [onStreamFailed]);
 
   const syncProgress = useCallback(
     (force = false) => {
       const video = videoRef.current;
       if (!video || !onProgress) return;
       const now = Date.now();
-      if (!force && now - lastSyncRef.current < 10000) return;
+      if (!force && now - lastSyncRef.current < 12000) return;
       lastSyncRef.current = now;
       const completed =
         video.duration > 0 && video.currentTime / video.duration >= 0.95;
@@ -101,9 +129,7 @@ export function VideoPlayer({
     clearHideTimer();
     const video = videoRef.current;
     if (!video || video.paused) return;
-    hideTimerRef.current = window.setTimeout(() => {
-      setControlsVisible(false);
-    }, 2800);
+    hideTimerRef.current = window.setTimeout(() => setControlsVisible(false), 2500);
   }, [clearHideTimer]);
 
   const showControls = useCallback(() => {
@@ -111,66 +137,22 @@ export function VideoPlayer({
     scheduleHideControls();
   }, [scheduleHideControls]);
 
-  const waitForPlaybackReady = useCallback(async (video: HTMLVideoElement) => {
-    if (video.error) {
-      throw new Error("media");
-    }
-    if (video.readyState >= 2) return;
-
-    setLoading(true);
-    await new Promise<void>((resolve, reject) => {
-      const timeout = window.setTimeout(() => {
-        cleanup();
-        reject(new Error("timeout"));
-      }, 20000);
-
-      const onReady = () => {
-        cleanup();
-        resolve();
-      };
-      const onErr = () => {
-        cleanup();
-        reject(new Error("media"));
-      };
-      const cleanup = () => {
-        window.clearTimeout(timeout);
-        video.removeEventListener("canplay", onReady);
-        video.removeEventListener("loadeddata", onReady);
-        video.removeEventListener("error", onErr);
-      };
-
-      video.addEventListener("canplay", onReady);
-      video.addEventListener("loadeddata", onReady);
-      video.addEventListener("error", onErr);
-    });
-  }, []);
-
   const togglePlay = useCallback(async () => {
     const video = videoRef.current;
     if (!video) return;
     showControls();
-
     if (!video.paused) {
       video.pause();
       return;
     }
-
     try {
-      await waitForPlaybackReady(video);
-      setError(null);
       await video.play();
-      setLoading(false);
     } catch (err) {
-      setLoading(false);
       const name = err instanceof DOMException ? err.name : "";
-      if (name === "AbortError" || name === "NotAllowedError") {
-        return;
-      }
-      setError(
-        "Could not start this recording. Check the Drive file is shared as Anyone with the link → Viewer, then try again."
-      );
+      if (name === "AbortError" || name === "NotAllowedError") return;
+      failOver();
     }
-  }, [showControls, waitForPlaybackReady]);
+  }, [failOver, showControls]);
 
   const skipBy = useCallback(
     (delta: number) => {
@@ -178,8 +160,8 @@ export function VideoPlayer({
       if (!video || !Number.isFinite(video.duration)) return;
       showControls();
       video.currentTime = Math.min(
-        video.duration,
-        Math.max(0, video.currentTime + delta)
+        Math.max(0, video.currentTime + delta),
+        video.duration
       );
       setCurrentTime(video.currentTime);
       syncProgress(true);
@@ -187,97 +169,25 @@ export function VideoPlayer({
     [showControls, syncProgress]
   );
 
-  const seekToRatio = useCallback(
-    (ratio: number) => {
-      const video = videoRef.current;
-      if (!video || !Number.isFinite(video.duration) || video.duration <= 0) {
-        return;
-      }
-      const next = Math.min(1, Math.max(0, ratio)) * video.duration;
-      video.currentTime = next;
-      setCurrentTime(next);
-      setScrubTime(next);
-    },
-    []
-  );
-
-  const onProgressPointer = useCallback(
-    (event: ReactPointerEvent<HTMLDivElement>) => {
-      const rect = event.currentTarget.getBoundingClientRect();
-      if (rect.width <= 0) return;
-      const ratio = (event.clientX - rect.left) / rect.width;
-      dragProgressRef.current = ratio;
-      const video = videoRef.current;
-      if (video && video.duration > 0) {
-        setScrubTime(ratio * video.duration);
-      }
-      seekToRatio(ratio);
-    },
-    [seekToRatio]
-  );
-
-  const toggleMute = useCallback(() => {
-    const video = videoRef.current;
-    if (!video) return;
-    video.muted = !video.muted;
-    setMuted(video.muted);
-    showControls();
-  }, [showControls]);
-
-  const toggleFullscreen = useCallback(async () => {
-    const root = containerRef.current;
-    if (!root) return;
-    showControls();
-    try {
-      if (document.fullscreenElement) {
-        await document.exitFullscreen();
-      } else {
-        await root.requestFullscreen();
-      }
-    } catch {
-    }
-  }, [showControls]);
-
-  const retry = useCallback(() => {
-    setError(null);
-    setLoading(true);
-    setRetryCount((c) => c + 1);
-    hasSeekedRef.current = false;
-  }, []);
-
-  useEffect(() => {
-    hasSeekedRef.current = false;
-    setLoading(true);
-    setError(null);
-    setPlaying(false);
-    setCurrentTime(0);
-    setDuration(0);
-    setControlsVisible(true);
-    setRetryCount(0);
-  }, [partId]);
-
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
 
-    video.setAttribute("playsinline", "true");
-    video.setAttribute("webkit-playsinline", "true");
+    const timeout = window.setTimeout(() => {
+      if (video.readyState < 2) failOver();
+    }, 8000);
 
-    const onLoadedMetadata = () => {
+    const onMeta = () => {
       setDuration(video.duration || 0);
       if (initialPosition > 0 && !hasSeekedRef.current) {
         video.currentTime = initialPosition;
         hasSeekedRef.current = true;
-        setCurrentTime(initialPosition);
       }
     };
-
-    const onCanPlay = () => setLoading(false);
-    const onWaiting = () => setLoading(true);
-    const onPlaying = () => {
-      setLoading(false);
+    const onReady = () => setLoading(false);
+    const onPlay = () => {
       setPlaying(true);
-      setError(null);
+      setLoading(false);
       scheduleHideControls();
     };
     const onPause = () => {
@@ -286,7 +196,7 @@ export function VideoPlayer({
       clearHideTimer();
       syncProgress(true);
     };
-    const onTimeUpdate = () => {
+    const onTime = () => {
       if (!scrubbing) setCurrentTime(video.currentTime);
       syncProgress();
     };
@@ -295,48 +205,35 @@ export function VideoPlayer({
       setControlsVisible(true);
       syncProgress(true);
     };
-    const onError = () => {
-      setLoading(false);
-      setPlaying(false);
-      if (retryCount < 1) {
-        setRetryCount((c) => c + 1);
-        setLoading(true);
-      } else {
-        setError(
-          "Could not stream this recording. Check that the Drive file is shared as Anyone with the link → Viewer."
-        );
-      }
-    };
+    const onError = () => failOver();
 
-    video.addEventListener("loadedmetadata", onLoadedMetadata);
-    video.addEventListener("canplay", onCanPlay);
-    video.addEventListener("waiting", onWaiting);
-    video.addEventListener("playing", onPlaying);
+    video.addEventListener("loadedmetadata", onMeta);
+    video.addEventListener("canplay", onReady);
+    video.addEventListener("playing", onPlay);
     video.addEventListener("pause", onPause);
-    video.addEventListener("timeupdate", onTimeUpdate);
+    video.addEventListener("timeupdate", onTime);
     video.addEventListener("ended", onEnded);
     video.addEventListener("error", onError);
 
     return () => {
-      video.removeEventListener("loadedmetadata", onLoadedMetadata);
-      video.removeEventListener("canplay", onCanPlay);
-      video.removeEventListener("waiting", onWaiting);
-      video.removeEventListener("playing", onPlaying);
+      window.clearTimeout(timeout);
+      video.removeEventListener("loadedmetadata", onMeta);
+      video.removeEventListener("canplay", onReady);
+      video.removeEventListener("playing", onPlay);
       video.removeEventListener("pause", onPause);
-      video.removeEventListener("timeupdate", onTimeUpdate);
+      video.removeEventListener("timeupdate", onTime);
       video.removeEventListener("ended", onEnded);
       video.removeEventListener("error", onError);
-      syncProgress(true);
       clearHideTimer();
+      syncProgress(true);
     };
   }, [
     clearHideTimer,
+    failOver,
     initialPosition,
     partId,
-    retryCount,
     scheduleHideControls,
     scrubbing,
-    streamUrl,
     syncProgress,
   ]);
 
@@ -346,243 +243,217 @@ export function VideoPlayer({
     return () => document.removeEventListener("fullscreenchange", onFs);
   }, []);
 
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      const target = event.target as HTMLElement | null;
-      if (
-        target &&
-        (target.tagName === "INPUT" ||
-          target.tagName === "TEXTAREA" ||
-          target.isContentEditable)
-      ) {
-        return;
-      }
-      if (event.key === " " || event.key === "k") {
-        event.preventDefault();
-        void togglePlay();
-      } else if (event.key === "ArrowLeft" || event.key === "j") {
-        event.preventDefault();
-        skipBy(-10);
-      } else if (event.key === "ArrowRight" || event.key === "l") {
-        event.preventDefault();
-        skipBy(10);
-      } else if (event.key === "m") {
-        event.preventDefault();
-        toggleMute();
-      } else if (event.key === "f") {
-        event.preventDefault();
-        void toggleFullscreen();
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [skipBy, toggleFullscreen, toggleMute, togglePlay]);
-
   return (
-    <div className="w-full min-w-0 max-w-full space-y-2 overflow-x-hidden">
+    <div
+      ref={containerRef}
+      className="group relative aspect-video w-full min-w-0 max-w-full overflow-hidden rounded-xl bg-black select-none"
+      onPointerMove={showControls}
+    >
+      <video
+        ref={videoRef}
+        src={streamUrl}
+        poster={posterUrl}
+        playsInline
+        preload="auto"
+        className="absolute inset-0 h-full w-full object-contain"
+        onClick={() => void togglePlay()}
+      />
+
+      {loading && (
+        <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center bg-black/20">
+          <Loader2 className="h-8 w-8 animate-spin text-white" />
+        </div>
+      )}
+
       <div
-        ref={containerRef}
-        className="group relative aspect-video w-full min-w-0 max-w-full overflow-hidden rounded-xl bg-black select-none"
-        onPointerMove={showControls}
-        onFocus={showControls}
+        className={cn(
+          "absolute inset-0 z-10 flex flex-col justify-end transition-opacity duration-200",
+          controlsVisible || !playing
+            ? "opacity-100"
+            : "pointer-events-none opacity-0"
+        )}
       >
-        <video
-          ref={videoRef}
-          key={streamUrl}
-          src={streamUrl}
-          poster={posterUrl}
-          playsInline
-          preload="auto"
-          className="absolute inset-0 h-full w-full bg-black object-contain"
-          onClick={togglePlay}
-        />
-
-        {loading && !error && (
-          <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center bg-black/25">
-            <Loader2 className="h-9 w-9 animate-spin text-white" />
-          </div>
-        )}
-
-        {error && (
-          <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 bg-zinc-950/90 px-6 text-center">
-            <p className="max-w-sm text-sm text-zinc-200">{error}</p>
-            <div className="flex flex-wrap items-center justify-center gap-2">
-              <button
-                type="button"
-                onClick={retry}
-                className="rounded-full bg-white px-4 py-2 text-sm font-medium text-zinc-900"
-              >
-                Try again
-              </button>
-              <a
-                href={driveOpenUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 rounded-full border border-white/20 px-4 py-2 text-sm text-white"
-              >
-                <ExternalLink className="h-3.5 w-3.5" />
-                Open in Drive
-              </a>
-            </div>
-          </div>
-        )}
-
-        {!error && (
-          <div
-            className={cn(
-              "absolute inset-0 z-10 flex flex-col justify-end transition-opacity duration-200",
-              controlsVisible || !playing
-                ? "opacity-100"
-                : "pointer-events-none opacity-0"
-            )}
+        <div className="pointer-events-none absolute inset-0 flex items-center justify-center gap-5">
+          <button
+            type="button"
+            aria-label="Back 10 seconds"
+            className="pointer-events-auto flex h-11 w-11 items-center justify-center rounded-full bg-black/50 text-white"
+            onClick={() => skipBy(-10)}
           >
+            <RotateCcw className="h-5 w-5" />
+          </button>
+          <button
+            type="button"
+            aria-label={playing ? "Pause" : "Play"}
+            className="pointer-events-auto flex h-14 w-14 items-center justify-center rounded-full bg-white text-zinc-900 shadow"
+            onClick={() => void togglePlay()}
+          >
+            {playing ? (
+              <Pause className="h-6 w-6" fill="currentColor" />
+            ) : (
+              <Play className="ml-0.5 h-6 w-6" fill="currentColor" />
+            )}
+          </button>
+          <button
+            type="button"
+            aria-label="Forward 10 seconds"
+            className="pointer-events-auto flex h-11 w-11 items-center justify-center rounded-full bg-black/50 text-white"
+            onClick={() => skipBy(10)}
+          >
+            <RotateCw className="h-5 w-5" />
+          </button>
+        </div>
+
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-black/70 to-transparent" />
+
+        <div className="relative z-10 space-y-2 px-3 pb-3 pt-6">
+          <div
+            className="h-1.5 cursor-pointer rounded-full bg-white/25"
+            onPointerDown={(event) => {
+              const video = videoRef.current;
+              if (!video || !video.duration) return;
+              const rect = event.currentTarget.getBoundingClientRect();
+              const ratio = (event.clientX - rect.left) / rect.width;
+              const next = Math.min(1, Math.max(0, ratio)) * video.duration;
+              setScrubbing(true);
+              setScrubTime(next);
+              video.currentTime = next;
+              event.currentTarget.setPointerCapture(event.pointerId);
+            }}
+            onPointerMove={(event) => {
+              if (!scrubbing) return;
+              const video = videoRef.current;
+              if (!video || !video.duration) return;
+              const rect = event.currentTarget.getBoundingClientRect();
+              const ratio = (event.clientX - rect.left) / rect.width;
+              const next = Math.min(1, Math.max(0, ratio)) * video.duration;
+              setScrubTime(next);
+              video.currentTime = next;
+            }}
+            onPointerUp={(event) => {
+              if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+                event.currentTarget.releasePointerCapture(event.pointerId);
+              }
+              setScrubbing(false);
+              syncProgress(true);
+            }}
+          >
+            <div
+              className="h-full rounded-full bg-white"
+              style={{ width: `${progressPercent}%` }}
+            />
+          </div>
+
+          <div className="flex items-center gap-2 text-white">
+            <button type="button" onClick={() => void togglePlay()} className="p-1.5">
+              {playing ? (
+                <Pause className="h-4 w-4" fill="currentColor" />
+              ) : (
+                <Play className="h-4 w-4" fill="currentColor" />
+              )}
+            </button>
             <button
               type="button"
-              aria-label={playing ? "Pause" : "Play"}
-              className="absolute inset-0 z-0"
-              onClick={togglePlay}
-            />
-
-            <div className="pointer-events-none absolute inset-0 flex items-center justify-center gap-6">
-              <button
-                type="button"
-                aria-label="Back 10 seconds"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  skipBy(-10);
-                }}
-                className="pointer-events-auto flex h-12 w-12 items-center justify-center rounded-full bg-black/45 text-white backdrop-blur-sm transition hover:bg-black/60"
-              >
-                <RotateCcw className="h-5 w-5" />
-              </button>
-              <button
-                type="button"
-                aria-label={playing ? "Pause" : "Play"}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  void togglePlay();
-                }}
-                className="pointer-events-auto flex h-16 w-16 items-center justify-center rounded-full bg-white text-zinc-900 shadow-lg transition hover:scale-105"
-              >
-                {playing ? (
-                  <Pause className="h-7 w-7" fill="currentColor" />
-                ) : (
-                  <Play className="ml-0.5 h-7 w-7" fill="currentColor" />
-                )}
-              </button>
-              <button
-                type="button"
-                aria-label="Forward 10 seconds"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  skipBy(10);
-                }}
-                className="pointer-events-auto flex h-12 w-12 items-center justify-center rounded-full bg-black/45 text-white backdrop-blur-sm transition hover:bg-black/60"
-              >
-                <RotateCw className="h-5 w-5" />
-              </button>
-            </div>
-
-            <div className="pointer-events-none absolute inset-x-0 bottom-0 h-28 bg-gradient-to-t from-black/75 via-black/35 to-transparent" />
-
-            <div className="relative z-10 space-y-2 px-3 pb-3 pt-8 sm:px-4">
-              <div
-                className="group/progress relative h-1.5 cursor-pointer rounded-full bg-white/25"
-                onPointerDown={(event) => {
-                  event.currentTarget.setPointerCapture(event.pointerId);
-                  setScrubbing(true);
-                  showControls();
-                  onProgressPointer(event);
-                }}
-                onPointerMove={(event) => {
-                  if (!scrubbing) return;
-                  onProgressPointer(event);
-                }}
-                onPointerUp={(event) => {
-                  if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-                    event.currentTarget.releasePointerCapture(event.pointerId);
-                  }
-                  setScrubbing(false);
-                  syncProgress(true);
-                  scheduleHideControls();
-                }}
-                onPointerCancel={() => {
-                  setScrubbing(false);
-                  scheduleHideControls();
-                }}
-              >
-                <div
-                  className="absolute inset-y-0 left-0 rounded-full bg-white"
-                  style={{ width: `${progressPercent}%` }}
-                />
-                <div
-                  className="absolute top-1/2 h-3.5 w-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white opacity-0 shadow transition group-hover/progress:opacity-100 group-active/progress:opacity-100"
-                  style={{ left: `${progressPercent}%` }}
-                />
-              </div>
-
-              <div className="flex items-center gap-2 text-white">
-                <button
-                  type="button"
-                  aria-label={playing ? "Pause" : "Play"}
-                  onClick={togglePlay}
-                  className="rounded-full p-1.5 transition hover:bg-white/10"
-                >
-                  {playing ? (
-                    <Pause className="h-4 w-4" fill="currentColor" />
-                  ) : (
-                    <Play className="h-4 w-4" fill="currentColor" />
-                  )}
-                </button>
-                <button
-                  type="button"
-                  aria-label="Back 10 seconds"
-                  onClick={() => skipBy(-10)}
-                  className="hidden rounded-full p-1.5 transition hover:bg-white/10 sm:inline-flex"
-                >
-                  <RotateCcw className="h-4 w-4" />
-                </button>
-                <button
-                  type="button"
-                  aria-label="Forward 10 seconds"
-                  onClick={() => skipBy(10)}
-                  className="hidden rounded-full p-1.5 transition hover:bg-white/10 sm:inline-flex"
-                >
-                  <RotateCw className="h-4 w-4" />
-                </button>
-                <button
-                  type="button"
-                  aria-label={muted ? "Unmute" : "Mute"}
-                  onClick={toggleMute}
-                  className="rounded-full p-1.5 transition hover:bg-white/10"
-                >
-                  {muted ? (
-                    <VolumeX className="h-4 w-4" />
-                  ) : (
-                    <Volume2 className="h-4 w-4" />
-                  )}
-                </button>
-                <span className="ml-1 text-xs tabular-nums text-white/90">
-                  {formatTime(displayTime)} / {formatTime(duration)}
-                </span>
-                <div className="flex-1" />
-                <button
-                  type="button"
-                  aria-label={fullscreen ? "Exit fullscreen" : "Fullscreen"}
-                  onClick={() => void toggleFullscreen()}
-                  className="rounded-full p-1.5 transition hover:bg-white/10"
-                >
-                  {fullscreen ? (
-                    <Minimize className="h-4 w-4" />
-                  ) : (
-                    <Maximize className="h-4 w-4" />
-                  )}
-                </button>
-              </div>
-            </div>
+              className="p-1.5"
+              onClick={() => {
+                const video = videoRef.current;
+                if (!video) return;
+                video.muted = !video.muted;
+                setMuted(video.muted);
+              }}
+            >
+              {muted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
+            </button>
+            <span className="text-xs tabular-nums text-white/90">
+              {formatTime(displayTime)} / {formatTime(duration)}
+            </span>
+            <div className="flex-1" />
+            <button
+              type="button"
+              className="p-1.5"
+              onClick={async () => {
+                const root = containerRef.current;
+                if (!root) return;
+                try {
+                  if (document.fullscreenElement) await document.exitFullscreen();
+                  else await root.requestFullscreen();
+                } catch {
+                }
+              }}
+            >
+              {fullscreen ? (
+                <Minimize className="h-4 w-4" />
+              ) : (
+                <Maximize className="h-4 w-4" />
+              )}
+            </button>
           </div>
-        )}
+        </div>
       </div>
     </div>
+  );
+}
+
+export function VideoPlayer(props: VideoPlayerProps) {
+  const [mode, setMode] = useState<Mode>("checking");
+
+  useEffect(() => {
+    let cancelled = false;
+    const controller = new AbortController();
+
+    (async () => {
+      try {
+        const response = await fetch(`/api/stream/part/${props.partId}`, {
+          method: "GET",
+          headers: { Range: "bytes=0-1" },
+          signal: controller.signal,
+        });
+        const type = response.headers.get("content-type") ?? "";
+        if (
+          !cancelled &&
+          (response.ok || response.status === 206) &&
+          !type.includes("application/json") &&
+          !type.includes("text/html")
+        ) {
+          setMode("native");
+          return;
+        }
+      } catch {
+      }
+      if (!cancelled) setMode("drive");
+    })();
+
+    const timeout = window.setTimeout(() => {
+      if (!cancelled) setMode((m) => (m === "checking" ? "drive" : m));
+    }, 2500);
+
+    return () => {
+      cancelled = true;
+      controller.abort();
+      window.clearTimeout(timeout);
+    };
+  }, [props.partId]);
+
+  if (mode === "checking") {
+    return (
+      <div className="relative aspect-video w-full overflow-hidden rounded-xl bg-black">
+        <img
+          src={drivePosterUrl(props.driveFileId)}
+          alt=""
+          className="absolute inset-0 h-full w-full object-contain opacity-80"
+        />
+        <div className="absolute inset-0 flex items-center justify-center bg-black/25">
+          <Loader2 className="h-8 w-8 animate-spin text-white" />
+        </div>
+      </div>
+    );
+  }
+
+  if (mode === "drive") {
+    return <DriveEmbed driveFileId={props.driveFileId} />;
+  }
+
+  return (
+    <NativePlayer {...props} onStreamFailed={() => setMode("drive")} />
   );
 }

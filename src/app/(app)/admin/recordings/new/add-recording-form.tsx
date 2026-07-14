@@ -83,6 +83,7 @@ export function AddRecordingForm({ topics }: AddRecordingFormProps) {
     e.preventDefault();
     setLoading(true);
 
+    const toastId = toast.loading("Saving recording...");
     const response = await fetch("/api/admin/lessons", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -98,12 +99,12 @@ export function AddRecordingForm({ topics }: AddRecordingFormProps) {
     const data = await response.json();
 
     if (!response.ok) {
-      toast.error(data.error ?? "Failed to add recording");
+      toast.error(data.error ?? "Failed to add recording", { id: toastId });
       setLoading(false);
       return;
     }
 
-    toast.success("Recording added successfully");
+    toast.success("Recording added", { id: toastId });
     router.push(`/lessons/${data.id}`);
     router.refresh();
   };
