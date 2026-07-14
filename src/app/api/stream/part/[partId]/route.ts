@@ -27,10 +27,17 @@ export async function GET(
 
   try {
     const rangeHeader = request.headers.get("range");
-    const driveResponse = await fetchPublicDriveStream(
-      part.drive_file_id,
-      rangeHeader
-    );
+    let driveResponse: Response;
+
+    try {
+      driveResponse = await fetchPublicDriveStream(
+        part.drive_file_id,
+        rangeHeader
+      );
+    } catch (rangeError) {
+      if (!rangeHeader) throw rangeError;
+      driveResponse = await fetchPublicDriveStream(part.drive_file_id, null);
+    }
 
     const upstreamType = driveResponse.headers.get("content-type") ?? "";
     const contentType =
@@ -49,7 +56,7 @@ export async function GET(
     if (contentRange) headers.set("Content-Range", contentRange);
 
     return new NextResponse(driveResponse.body, {
-      status: driveResponse.status,
+      status: contentRange ? driveResponse.status : rangeHeader && !contentRange ? 200 : driveResponse.status,
       headers,
     });
   } catch (error) {

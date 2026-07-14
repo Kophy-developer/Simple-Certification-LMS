@@ -111,20 +111,66 @@ export function VideoPlayer({
     scheduleHideControls();
   }, [scheduleHideControls]);
 
+  const waitForPlaybackReady = useCallback(async (video: HTMLVideoElement) => {
+    if (video.error) {
+      throw new Error("media");
+    }
+    if (video.readyState >= 2) return;
+
+    setLoading(true);
+    await new Promise<void>((resolve, reject) => {
+      const timeout = window.setTimeout(() => {
+        cleanup();
+        reject(new Error("timeout"));
+      }, 20000);
+
+      const onReady = () => {
+        cleanup();
+        resolve();
+      };
+      const onErr = () => {
+        cleanup();
+        reject(new Error("media"));
+      };
+      const cleanup = () => {
+        window.clearTimeout(timeout);
+        video.removeEventListener("canplay", onReady);
+        video.removeEventListener("loadeddata", onReady);
+        video.removeEventListener("error", onErr);
+      };
+
+      video.addEventListener("canplay", onReady);
+      video.addEventListener("loadeddata", onReady);
+      video.addEventListener("error", onErr);
+    });
+  }, []);
+
   const togglePlay = useCallback(async () => {
     const video = videoRef.current;
     if (!video) return;
     showControls();
-    try {
-      if (video.paused) {
-        await video.play();
-      } else {
-        video.pause();
-      }
-    } catch {
-      setError("Playback was blocked. Tap play again.");
+
+    if (!video.paused) {
+      video.pause();
+      return;
     }
-  }, [showControls]);
+
+    try {
+      await waitForPlaybackReady(video);
+      setError(null);
+      await video.play();
+      setLoading(false);
+    } catch (err) {
+      setLoading(false);
+      const name = err instanceof DOMException ? err.name : "";
+      if (name === "AbortError" || name === "NotAllowedError") {
+        return;
+      }
+      setError(
+        "Could not start this recording. Check the Drive file is shared as Anyone with the link → Viewer, then try again."
+      );
+    }
+  }, [showControls, waitForPlaybackReady]);
 
   const skipBy = useCallback(
     (delta: number) => {
