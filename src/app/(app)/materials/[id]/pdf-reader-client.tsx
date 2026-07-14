@@ -10,7 +10,7 @@ interface PdfReaderClientProps {
   materialId: string;
   title: string;
   year: number;
-  topicName: string;
+  topicNames: string[];
   fileName: string;
 }
 
@@ -18,7 +18,7 @@ export function PdfReaderClient({
   materialId,
   title,
   year,
-  topicName,
+  topicNames,
   fileName,
 }: PdfReaderClientProps) {
   const [url, setUrl] = useState<string | null>(null);
@@ -76,7 +76,11 @@ export function PdfReaderClient({
             Back to library
           </LinkButton>
           <div className="flex flex-wrap items-center gap-2">
-            <Badge variant="secondary">{topicName}</Badge>
+            {topicNames.map((name) => (
+              <Badge key={name} variant="secondary">
+                {name}
+              </Badge>
+            ))}
             <Badge variant="outline">{year}</Badge>
           </div>
           <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>

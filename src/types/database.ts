@@ -82,7 +82,6 @@ export interface ProgressWithLesson extends Progress {
 
 export interface Material {
   id: string;
-  topic_id: string;
   year: number;
   title: string;
   file_path: string;
@@ -92,6 +91,11 @@ export interface Material {
   created_at: string;
 }
 
-export interface MaterialWithTopic extends Material {
+export interface MaterialTopicLink {
+  topic_id: string;
   topics: Pick<Topic, "id" | "name"> | null;
+}
+
+export interface MaterialWithTopic extends Material {
+  material_topics: MaterialTopicLink[];
 }

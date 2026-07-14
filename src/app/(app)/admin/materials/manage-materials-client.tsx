@@ -15,6 +15,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { materialTopicNames } from "@/lib/materials";
 import type { MaterialWithTopic, Topic } from "@/types/database";
 
 interface ManageMaterialsClientProps {
@@ -41,7 +42,7 @@ export function ManageMaterialsClient({
 
   const [materials, setMaterials] = useState(initialMaterials);
   const [title, setTitle] = useState("");
-  const [topicId, setTopicId] = useState("");
+  const [topicIds, setTopicIds] = useState<string[]>([]);
   const [year, setYear] = useState(String(currentYear));
   const [file, setFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
@@ -59,13 +60,14 @@ export function ManageMaterialsClient({
     >();
 
     for (const material of filtered) {
-      const key = `${material.topic_id}-${material.year}`;
+      const topicName = materialTopicNames(material);
+      const key = `${topicName}-${material.year}`;
       const existing = map.get(key);
       if (existing) {
         existing.items.push(material);
       } else {
         map.set(key, {
-          topicName: material.topics?.name ?? "Topic",
+          topicName,
           year: material.year,
           items: [material],
         });
@@ -78,14 +80,20 @@ export function ManageMaterialsClient({
     });
   }, [materials, filterYear]);
 
+  const toggleTopic = (id: string) => {
+    setTopicIds((prev) =>
+      prev.includes(id) ? prev.filter((t) => t !== id) : [...prev, id]
+    );
+  };
+
   const handleUpload = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!file || !topicId || !title.trim()) return;
+    if (!file || topicIds.length === 0 || !title.trim()) return;
 
     setLoading(true);
     const form = new FormData();
     form.set("title", title.trim());
-    form.set("topicId", topicId);
+    form.set("topicIdsJson", JSON.stringify(topicIds));
     form.set("year", year);
     form.set("file", file);
 
@@ -103,6 +111,7 @@ export function ManageMaterialsClient({
 
     setMaterials((prev) => [data, ...prev]);
     setTitle("");
+    setTopicIds([]);
     setFile(null);
     toast.success("PDF uploaded");
     router.refresh();
@@ -142,7 +151,7 @@ export function ManageMaterialsClient({
             Upload PDF
           </CardTitle>
           <CardDescription>
-            Choose the topic and the year the material belongs to.
+            Select one or more topics and the year the material belongs to.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -158,42 +167,50 @@ export function ManageMaterialsClient({
               />
             </div>
 
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="materialTopic">Topic</Label>
-                <select
-                  id="materialTopic"
-                  className="flex h-9 w-full rounded-lg border border-input bg-background px-3 text-sm"
-                  value={topicId}
-                  onChange={(e) => setTopicId(e.target.value)}
-                  required
-                >
-                  <option value="" disabled>
-                    Select topic
+            <div className="space-y-2">
+              <Label>Topics</Label>
+              <div className="max-h-48 space-y-2 overflow-y-auto rounded-lg border border-input p-3">
+                {topics.map((topic) => {
+                  const checked = topicIds.includes(topic.id);
+                  return (
+                    <label
+                      key={topic.id}
+                      className="flex cursor-pointer items-center gap-2 text-sm"
+                    >
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4 rounded border-input"
+                        checked={checked}
+                        onChange={() => toggleTopic(topic.id)}
+                      />
+                      <span>{topic.name}</span>
+                    </label>
+                  );
+                })}
+              </div>
+              {topicIds.length > 0 && (
+                <p className="text-xs text-muted-foreground">
+                  {topicIds.length} topic{topicIds.length === 1 ? "" : "s"}{" "}
+                  selected
+                </p>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="materialYear">Year</Label>
+              <select
+                id="materialYear"
+                className="flex h-9 w-full rounded-lg border border-input bg-background px-3 text-sm sm:max-w-xs"
+                value={year}
+                onChange={(e) => setYear(e.target.value)}
+                required
+              >
+                {years.map((y) => (
+                  <option key={y} value={String(y)}>
+                    {y}
                   </option>
-                  {topics.map((topic) => (
-                    <option key={topic.id} value={topic.id}>
-                      {topic.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="materialYear">Year</Label>
-                <select
-                  id="materialYear"
-                  className="flex h-9 w-full rounded-lg border border-input bg-background px-3 text-sm"
-                  value={year}
-                  onChange={(e) => setYear(e.target.value)}
-                  required
-                >
-                  {years.map((y) => (
-                    <option key={y} value={String(y)}>
-                      {y}
-                    </option>
-                  ))}
-                </select>
-              </div>
+                ))}
+              </select>
             </div>
 
             <div className="space-y-2">
@@ -209,7 +226,9 @@ export function ManageMaterialsClient({
 
             <Button
               type="submit"
-              disabled={loading || !file || !topicId || !title.trim()}
+              disabled={
+                loading || !file || topicIds.length === 0 || !title.trim()
+              }
             >
               {loading ? "Uploading..." : "Upload PDF"}
             </Button>

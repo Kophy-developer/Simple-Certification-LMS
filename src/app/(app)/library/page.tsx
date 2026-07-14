@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { MATERIAL_TOPICS_SELECT } from "@/lib/materials";
 import { LibraryClient } from "./library-client";
 import type {
   LessonWithTopic,
@@ -18,7 +19,7 @@ export default async function LibraryPage() {
         .order("session_date", { ascending: false }),
       supabase
         .from("materials")
-        .select("*, topics(id, name)")
+        .select(MATERIAL_TOPICS_SELECT)
         .order("year", { ascending: false })
         .order("title"),
     ]);

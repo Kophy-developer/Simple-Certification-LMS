@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { MATERIAL_TOPICS_SELECT } from "@/lib/materials";
 import { ManageMaterialsClient } from "./manage-materials-client";
 import type { MaterialWithTopic, Topic } from "@/types/database";
 
@@ -9,7 +10,7 @@ export default async function AdminMaterialsPage() {
     supabase.from("topics").select("*").order("sort_order"),
     supabase
       .from("materials")
-      .select("*, topics(id, name)")
+      .select(MATERIAL_TOPICS_SELECT)
       .order("year", { ascending: false })
       .order("created_at", { ascending: false }),
   ]);

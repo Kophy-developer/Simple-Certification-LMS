@@ -9,6 +9,10 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { EmptyState } from "@/components/empty-state";
 import { LinkButton } from "@/components/link-button";
+import {
+  materialHasTopic,
+  materialTopicNames,
+} from "@/lib/materials";
 import type { LessonWithTopic, MaterialWithTopic, Topic } from "@/types/database";
 import { toast } from "sonner";
 
@@ -52,7 +56,7 @@ export function LibraryClient({
         material.title.toLowerCase().includes(search.toLowerCase()) ||
         material.file_name.toLowerCase().includes(search.toLowerCase());
       const matchesTopic =
-        !selectedTopic || material.topic_id === selectedTopic;
+        !selectedTopic || materialHasTopic(material, selectedTopic);
       const matchesYear =
         selectedYear == null || material.year === selectedYear;
       return matchesSearch && matchesTopic && matchesYear;
@@ -76,13 +80,14 @@ export function LibraryClient({
       { topicName: string; year: number; items: MaterialWithTopic[] }
     >();
     for (const material of filteredMaterials) {
-      const key = `${material.topic_id}-${material.year}`;
+      const topicName = materialTopicNames(material);
+      const key = `${topicName}-${material.year}`;
       const existing = map.get(key);
       if (existing) {
         existing.items.push(material);
       } else {
         map.set(key, {
-          topicName: material.topics?.name ?? "Topic",
+          topicName,
           year: material.year,
           items: [material],
         });
