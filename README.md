@@ -1,10 +1,11 @@
 # CFA Study LMS
 
-Private, invite-only CFA study library. Admins paste public Google Drive recording links (one lesson can have multiple parts). Students log in and watch.
+A private, invite-only CFA study library. Admins paste public Google Drive recording links (one lesson can have multiple parts). Students log in on the web or the Flutter Android app and watch.
 
 ## Stack
 
 - **Web:** Next.js, TypeScript, Tailwind, shadcn/ui
+- **Mobile:** Flutter (local APK via `flutter build apk`)
 - **Backend / auth:** Supabase
 - **Video:** Public Google Drive links (Anyone with the link)
 
@@ -54,3 +55,17 @@ Open `/setup` to create the first admin, then `/login`.
 
 1. Accept invite link and set a password
 2. Home / Library → open a lesson → switch parts if needed
+
+## Mobile app (Flutter APK)
+
+See [`mobile/README.md`](mobile/README.md).
+
+```bash
+cd mobile
+flutter build apk --release \
+  --dart-define=SUPABASE_URL=https://YOUR_PROJECT.supabase.co \
+  --dart-define=SUPABASE_ANON_KEY=YOUR_ANON_KEY \
+  --dart-define=API_URL=https://cfa-lms-ten.vercel.app
+```
+
+Install: `mobile/build/app/outputs/flutter-apk/app-release.apk`

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { getRequestUser } from "@/lib/supabase/request-user";
 import { fetchPublicDriveStream } from "@/lib/drive-stream";
 
 export async function GET(
@@ -8,10 +8,7 @@ export async function GET(
   { params }: { params: Promise<{ partId: string }> }
 ) {
   const { partId } = await params;
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getRequestUser(request);
 
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

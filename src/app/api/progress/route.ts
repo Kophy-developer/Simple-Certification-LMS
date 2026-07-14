@@ -1,16 +1,37 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { createClient } from "@supabase/supabase-js";
+import { createClient as createServerCookieClient } from "@/lib/supabase/server";
+import { getRequestUser } from "@/lib/supabase/request-user";
+
+async function getAuthedClient(request: Request) {
+  const authHeader = request.headers.get("authorization");
+  const token = authHeader?.startsWith("Bearer ")
+    ? authHeader.slice(7)
+    : null;
+
+  if (token) {
+    return createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        global: {
+          headers: { Authorization: `Bearer ${token}` },
+        },
+      }
+    );
+  }
+
+  return createServerCookieClient();
+}
 
 export async function POST(request: Request) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getRequestUser(request);
 
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const supabase = await getAuthedClient(request);
   const { lessonId, partId, watchedSeconds, completed } = await request.json();
 
   if (!lessonId || typeof watchedSeconds !== "number") {
