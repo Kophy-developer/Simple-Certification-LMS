@@ -6,6 +6,11 @@ import { drivePreviewUrl, driveViewUrl } from "@/lib/drive";
 import { Button } from "@/components/ui/button";
 
 const STREAM_LOAD_TIMEOUT_MS = 20000;
+const DESIGN_WIDTH = 640;
+const DESIGN_HEIGHT = 360;
+const MOBILE_EXTRA_PX = 36;
+const MOBILE_BREAKPOINT = 640;
+const EMBED_CACHE_BUST = "v2";
 
 interface VideoPlayerProps {
   partId: string;
@@ -16,6 +21,91 @@ interface VideoPlayerProps {
 
 function drivePosterUrl(fileId: string): string {
   return `https://drive.google.com/thumbnail?id=${fileId}&sz=w1280`;
+}
+
+function DrivePreviewFallback({ driveFileId }: { driveFileId: string }) {
+  const driveOpenUrl = driveViewUrl(driveFileId);
+  const previewSrc = `${drivePreviewUrl(driveFileId)}?usp=embed_googleplus&cb=${EMBED_CACHE_BUST}`;
+  const outerRef = useRef<HTMLDivElement>(null);
+  const [parentWidth, setParentWidth] = useState(0);
+
+  useEffect(() => {
+    const el = outerRef.current;
+    if (!el) return;
+
+    const measure = () => {
+      const width = el.clientWidth;
+      if (width > 0) setParentWidth(width);
+    };
+
+    measure();
+
+    const observer = new ResizeObserver((entries) => {
+      const width = entries[0]?.contentRect.width;
+      if (typeof width === "number" && width > 0) setParentWidth(width);
+    });
+
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
+  const isMobile = parentWidth > 0 && parentWidth < MOBILE_BREAKPOINT;
+  const scale = isMobile ? parentWidth / DESIGN_WIDTH : 1;
+  const iframeWidth = isMobile ? DESIGN_WIDTH : parentWidth || "100%";
+  const iframeHeight = isMobile
+    ? DESIGN_HEIGHT + MOBILE_EXTRA_PX / scale
+    : parentWidth
+      ? (parentWidth * 9) / 16
+      : "100%";
+  const outerHeight = isMobile
+    ? DESIGN_HEIGHT * scale + MOBILE_EXTRA_PX
+    : parentWidth
+      ? (parentWidth * 9) / 16
+      : undefined;
+
+  return (
+    <div className="w-full min-w-0 max-w-full space-y-2 overflow-x-hidden">
+      <div
+        ref={outerRef}
+        className="relative w-full min-w-0 max-w-full overflow-hidden rounded-xl bg-black"
+        style={
+          outerHeight != null
+            ? { height: outerHeight }
+            : { aspectRatio: "16 / 9" }
+        }
+      >
+        <iframe
+          title="Google Drive recording"
+          src={previewSrc}
+          className="absolute left-0 top-0 border-0"
+          style={{
+            width: iframeWidth,
+            height: iframeHeight,
+            transform: isMobile ? `scale(${scale})` : undefined,
+            transformOrigin: "top left",
+          }}
+          allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
+          allowFullScreen
+          referrerPolicy="strict-origin-when-cross-origin"
+        />
+      </div>
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-xs text-muted-foreground">
+          Stream unavailable — playing via Drive preview. Pause may show a
+          black frame (Drive UI).
+        </p>
+        <a
+          href={driveOpenUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex shrink-0 items-center gap-1 text-xs text-muted-foreground underline-offset-4 transition-colors hover:text-foreground hover:underline"
+        >
+          <ExternalLink className="h-3 w-3" />
+          Open in Drive
+        </a>
+      </div>
+    </div>
+  );
 }
 
 export function VideoPlayer({
@@ -127,40 +217,12 @@ export function VideoPlayer({
   ]);
 
   if (usePreview) {
-    return (
-      <div className="w-full min-w-0 max-w-full space-y-2">
-        <div className="relative aspect-video w-full overflow-hidden rounded-xl bg-black">
-          <iframe
-            title="Google Drive recording"
-            src={drivePreviewUrl(driveFileId)}
-            className="h-full w-full border-0"
-            allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
-            allowFullScreen
-            referrerPolicy="strict-origin-when-cross-origin"
-          />
-        </div>
-        <div className="flex items-center justify-between gap-3">
-          <p className="text-xs text-muted-foreground">
-            Stream unavailable — playing via Drive preview. Pause may show a
-            black frame (Drive UI).
-          </p>
-          <a
-            href={driveOpenUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex shrink-0 items-center gap-1 text-xs text-muted-foreground underline-offset-4 transition-colors hover:text-foreground hover:underline"
-          >
-            <ExternalLink className="h-3 w-3" />
-            Open in Drive
-          </a>
-        </div>
-      </div>
-    );
+    return <DrivePreviewFallback driveFileId={driveFileId} />;
   }
 
   return (
     <div className="w-full min-w-0 max-w-full space-y-2">
-      <div className="relative aspect-video w-full overflow-hidden rounded-xl bg-black">
+      <div className="relative aspect-video w-full min-w-0 max-w-full overflow-hidden rounded-xl bg-black">
         {loading && (
           <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center bg-black/40">
             <Loader2 className="h-8 w-8 animate-spin text-white" />
@@ -174,7 +236,7 @@ export function VideoPlayer({
           controls
           playsInline
           preload="metadata"
-          className="h-full w-full"
+          className="h-full w-full max-w-full object-contain"
         />
       </div>
       <div className="flex justify-end gap-3">
