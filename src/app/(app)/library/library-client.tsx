@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { EmptyState } from "@/components/empty-state";
+import { LinkButton } from "@/components/link-button";
 import type { LessonWithTopic, MaterialWithTopic, Topic } from "@/types/database";
 import { toast } from "sonner";
 
@@ -93,18 +94,18 @@ export function LibraryClient({
     });
   }, [filteredMaterials]);
 
-  const openPdf = async (id: string) => {
+  const downloadPdf = async (id: string) => {
     setOpeningId(id);
     try {
-      const response = await fetch(`/api/materials/${id}/download`);
+      const response = await fetch(`/api/materials/${id}/download?mode=download`);
       const data = await response.json();
       if (!response.ok || !data.url) {
-        toast.error(data.error ?? "Could not open PDF");
+        toast.error(data.error ?? "Could not download PDF");
         return;
       }
       window.open(data.url, "_blank", "noopener,noreferrer");
     } catch {
-      toast.error("Could not open PDF");
+      toast.error("Could not download PDF");
     } finally {
       setOpeningId(null);
     }
@@ -258,16 +259,24 @@ export function LibraryClient({
                             </p>
                           </div>
                         </div>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          onClick={() => openPdf(material.id)}
-                          disabled={openingId === material.id}
-                        >
-                          <Download className="mr-1.5 h-4 w-4" />
-                          {openingId === material.id ? "Opening..." : "Open"}
-                        </Button>
+                        <div className="flex shrink-0 items-center gap-2">
+                          <LinkButton
+                            href={`/materials/${material.id}`}
+                            size="sm"
+                          >
+                            Read
+                          </LinkButton>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() => downloadPdf(material.id)}
+                            disabled={openingId === material.id}
+                          >
+                            <Download className="mr-1.5 h-4 w-4" />
+                            {openingId === material.id ? "..." : "Download"}
+                          </Button>
+                        </div>
                       </CardContent>
                     </Card>
                   ))}

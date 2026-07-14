@@ -2,10 +2,11 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
+  const mode = new URL(request.url).searchParams.get("mode") ?? "view";
   const supabase = await createClient();
   const {
     data: { user },
@@ -25,18 +26,24 @@ export async function GET(
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
+  const options =
+    mode === "download"
+      ? { download: material.file_name }
+      : undefined;
+
   const { data, error } = await supabase.storage
     .from("materials")
-    .createSignedUrl(material.file_path, 60 * 60, {
-      download: material.file_name,
-    });
+    .createSignedUrl(material.file_path, 60 * 60, options);
 
   if (error || !data?.signedUrl) {
     return NextResponse.json(
-      { error: error?.message ?? "Could not create download link" },
+      { error: error?.message ?? "Could not create file link" },
       { status: 400 }
     );
   }
 
-  return NextResponse.json({ url: data.signedUrl });
+  return NextResponse.json({
+    url: data.signedUrl,
+    fileName: material.file_name,
+  });
 }
