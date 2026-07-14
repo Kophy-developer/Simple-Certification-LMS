@@ -1,36 +1,56 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# CFA Study LMS
 
-## Getting Started
+Private, invite-only CFA study library. Admins paste public Google Drive recording links (one lesson can have multiple parts). Students log in and watch.
 
-First, run the development server:
+## Stack
+
+- **Web:** Next.js, TypeScript, Tailwind, shadcn/ui
+- **Backend / auth:** Supabase
+- **Video:** Public Google Drive links (Anyone with the link)
+
+## Quick start
+
+### 1. Supabase
+
+1. Create a project at [supabase.com](https://supabase.com)
+2. Run **both** migration files in order via the SQL Editor:
+   - `supabase/migrations/20260709000000_initial_schema.sql`
+   - `supabase/migrations/20260714000000_lesson_parts_drive.sql`
+3. Copy project URL, anon key, and service role key
+
+### 2. Environment
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+cp .env.local.example .env.local
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+| Variable | Description |
+|---|---|
+| `NEXT_PUBLIC_SUPABASE_URL` | Supabase project URL |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase anon key |
+| `SUPABASE_SERVICE_ROLE_KEY` | Service role key (server only) |
+| `SETUP_SECRET` | Random string for first admin setup |
+| `NEXT_PUBLIC_APP_URL` | e.g. `http://localhost:3000` |
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+No Zoom or Google Cloud credentials required.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+### 3. Run
 
-## Learn More
+```bash
+npm install
+npm run dev
+```
 
-To learn more about Next.js, take a look at the following resources:
+Open `/setup` to create the first admin, then `/login`.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Admin workflow
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+1. Get Drive links for the recording(s)
+2. In Google Drive, set each file to **Anyone with the link → Viewer**
+3. Admin → Add Recording → paste Part 1, Part 2, … → Save
+4. Invite students under Manage Students
 
-## Deploy on Vercel
+## Student workflow
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+1. Accept invite link and set a password
+2. Home / Library → open a lesson → switch parts if needed
