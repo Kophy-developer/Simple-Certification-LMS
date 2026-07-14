@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 export async function GET() {
   const supabase = await createClient();
@@ -63,7 +64,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "PDF file is required" }, { status: 400 });
   }
 
-  if (file.type !== "application/pdf") {
+  if (file.type && file.type !== "application/pdf") {
     return NextResponse.json(
       { error: "Only PDF files are allowed" },
       { status: 400 }
@@ -79,9 +80,10 @@ export async function POST(request: Request) {
 
   const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
   const filePath = `${topicId}/${year}/${Date.now()}-${safeName}`;
-
+  const admin = createAdminClient();
   const bytes = await file.arrayBuffer();
-  const { error: uploadError } = await supabase.storage
+
+  const { error: uploadError } = await admin.storage
     .from("materials")
     .upload(filePath, bytes, {
       contentType: "application/pdf",
@@ -92,7 +94,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: uploadError.message }, { status: 400 });
   }
 
-  const { data: material, error } = await supabase
+  const { data: material, error } = await admin
     .from("materials")
     .insert({
       topic_id: topicId,
@@ -107,8 +109,11 @@ export async function POST(request: Request) {
     .single();
 
   if (error) {
-    await supabase.storage.from("materials").remove([filePath]);
-    return NextResponse.json({ error: error.message }, { status: 400 });
+    await admin.storage.from("materials").remove([filePath]);
+    return NextResponse.json(
+      { error: error.message || `database error, code: ${error.code}` },
+      { status: 400 }
+    );
   }
 
   return NextResponse.json(material);

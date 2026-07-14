@@ -15,13 +15,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import type { MaterialWithTopic, Topic } from "@/types/database";
 
 interface ManageMaterialsClientProps {
@@ -167,40 +160,39 @@ export function ManageMaterialsClient({
 
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
-                <Label>Topic</Label>
-                <Select
+                <Label htmlFor="materialTopic">Topic</Label>
+                <select
+                  id="materialTopic"
+                  className="flex h-9 w-full rounded-lg border border-input bg-background px-3 text-sm"
                   value={topicId}
-                  onValueChange={(value) => setTopicId(value ?? "")}
+                  onChange={(e) => setTopicId(e.target.value)}
+                  required
                 >
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Select topic" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {topics.map((topic) => (
-                      <SelectItem key={topic.id} value={topic.id}>
-                        {topic.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                  <option value="" disabled>
+                    Select topic
+                  </option>
+                  {topics.map((topic) => (
+                    <option key={topic.id} value={topic.id}>
+                      {topic.name}
+                    </option>
+                  ))}
+                </select>
               </div>
               <div className="space-y-2">
-                <Label>Year</Label>
-                <Select
+                <Label htmlFor="materialYear">Year</Label>
+                <select
+                  id="materialYear"
+                  className="flex h-9 w-full rounded-lg border border-input bg-background px-3 text-sm"
                   value={year}
-                  onValueChange={(value) => setYear(value ?? String(currentYear))}
+                  onChange={(e) => setYear(e.target.value)}
+                  required
                 >
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Year" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {years.map((y) => (
-                      <SelectItem key={y} value={String(y)}>
-                        {y}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                  {years.map((y) => (
+                    <option key={y} value={String(y)}>
+                      {y}
+                    </option>
+                  ))}
+                </select>
               </div>
             </div>
 

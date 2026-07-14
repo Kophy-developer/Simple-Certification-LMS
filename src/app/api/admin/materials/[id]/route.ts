@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 export async function DELETE(
   _request: Request,
@@ -25,7 +26,8 @@ export async function DELETE(
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const { data: material } = await supabase
+  const admin = createAdminClient();
+  const { data: material } = await admin
     .from("materials")
     .select("file_path")
     .eq("id", id)
@@ -35,9 +37,9 @@ export async function DELETE(
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
-  await supabase.storage.from("materials").remove([material.file_path]);
+  await admin.storage.from("materials").remove([material.file_path]);
 
-  const { error } = await supabase.from("materials").delete().eq("id", id);
+  const { error } = await admin.from("materials").delete().eq("id", id);
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 400 });
