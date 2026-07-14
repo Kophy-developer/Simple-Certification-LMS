@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { format } from "date-fns";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -36,23 +36,6 @@ export function LessonPlayerClient({
   const activePart =
     sortedParts.find((part) => part.id === activePartId) ?? sortedParts[0];
 
-  const handleProgress = useCallback(
-    async (seconds: number, completed: boolean) => {
-      if (!activePart) return;
-      await fetch("/api/progress", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          lessonId: lesson.id,
-          partId: activePart.id,
-          watchedSeconds: seconds,
-          completed,
-        }),
-      });
-    },
-    [activePart, lesson.id]
-  );
-
   const topicName = lesson.topics?.name ?? "Uncategorized";
 
   if (!activePart) {
@@ -69,8 +52,6 @@ export function LessonPlayerClient({
         key={activePart.id}
         partId={activePart.id}
         driveFileId={activePart.drive_file_id}
-        initialPosition={progressByPart[activePart.id]?.watched_seconds ?? 0}
-        onProgress={handleProgress}
       />
 
       {sortedParts.length > 1 && (
