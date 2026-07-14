@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/password-input";
 import { Label } from "@/components/ui/label";
 import {
   Card,
@@ -27,21 +28,34 @@ export default function SetupPage() {
     setLoading(true);
     setError(null);
 
-    const response = await fetch("/api/setup", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, email, password, setupKey }),
-    });
+    try {
+      const response = await fetch("/api/setup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, email, password, setupKey }),
+      });
 
-    const data = await response.json();
+      const text = await response.text();
+      let data: { error?: string } = {};
+      try {
+        data = text ? JSON.parse(text) : {};
+      } catch {
+        setError("Setup failed. Check Vercel environment variables and try again.");
+        setLoading(false);
+        return;
+      }
 
-    if (!response.ok) {
-      setError(data.error ?? "Setup failed.");
+      if (!response.ok) {
+        setError(data.error ?? "Setup failed.");
+        setLoading(false);
+        return;
+      }
+
+      router.push("/login");
+    } catch {
+      setError("Could not reach the server. Please try again.");
       setLoading(false);
-      return;
     }
-
-    router.push("/login");
   };
 
   return (
@@ -76,9 +90,8 @@ export default function SetupPage() {
             </div>
             <div className="space-y-2">
               <Label htmlFor="password">Password</Label>
-              <Input
+              <PasswordInput
                 id="password"
-                type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
@@ -87,9 +100,8 @@ export default function SetupPage() {
             </div>
             <div className="space-y-2">
               <Label htmlFor="setupKey">Setup key</Label>
-              <Input
+              <PasswordInput
                 id="setupKey"
-                type="password"
                 value={setupKey}
                 onChange={(e) => setSetupKey(e.target.value)}
                 required
