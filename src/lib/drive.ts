@@ -30,6 +30,10 @@ export function drivePreviewUrl(fileId: string): string {
   return `https://drive.google.com/file/d/${fileId}/preview`;
 }
 
+export function driveViewUrl(fileId: string): string {
+  return `https://drive.google.com/file/d/${fileId}/view`;
+}
+
 export function driveDownloadUrl(fileId: string, confirm?: string): string {
   const base = `https://drive.google.com/uc?export=download&id=${fileId}`;
   return confirm ? `${base}&confirm=${confirm}` : base;
