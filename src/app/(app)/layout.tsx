@@ -16,7 +16,7 @@ export default async function AppLayout({
   return (
     <div className="flex min-h-screen flex-col">
       <AppNav profile={profile} />
-      <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-8">
+      <main className="mx-auto w-full min-w-0 max-w-6xl flex-1 overflow-x-hidden px-4 py-8">
         {children}
       </main>
     </div>

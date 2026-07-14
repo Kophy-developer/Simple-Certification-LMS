@@ -47,7 +47,7 @@ export function LessonPlayerClient({
   }
 
   return (
-    <div className="space-y-6">
+    <div className="w-full min-w-0 max-w-full space-y-6">
       <VideoPlayer
         key={activePart.id}
         partId={activePart.id}
