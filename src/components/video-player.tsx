@@ -221,7 +221,7 @@ export function VideoPlayer({
   }
 
   return (
-    <div className="w-full min-w-0 max-w-full space-y-2">
+    <div className="w-full min-w-0 max-w-full space-y-2 overflow-x-hidden">
       <div className="relative aspect-video w-full min-w-0 max-w-full overflow-hidden rounded-xl bg-black">
         {loading && (
           <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center bg-black/40">
@@ -236,7 +236,7 @@ export function VideoPlayer({
           controls
           playsInline
           preload="metadata"
-          className="h-full w-full max-w-full object-contain"
+          className="absolute inset-0 h-full w-full max-w-full bg-black object-contain"
         />
       </div>
       <div className="flex justify-end gap-3">
