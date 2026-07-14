@@ -3,6 +3,9 @@ import {
   extractGoogleDriveFileId,
 } from "@/lib/drive";
 
+const BROWSER_UA =
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36";
+
 function parseCookies(header: string | null): string {
   if (!header) return "";
   return header
@@ -16,7 +19,7 @@ function extractConfirmToken(html: string): string | null {
   const patterns = [
     /confirm=([0-9A-Za-z_-]+)/,
     /name="confirm"\s+value="([^"]+)"/,
-    /"downloadWarning"[^>]*value="([^"]+)"/,
+    /downloadUrl[^"']*confirm=([0-9A-Za-z_-]+)/,
     /uc-download-link[^>]+href="[^"]*confirm=([0-9A-Za-z_-]+)/,
   ];
 
@@ -28,59 +31,77 @@ function extractConfirmToken(html: string): string | null {
   return null;
 }
 
+async function fetchDriveOnce(
+  fileId: string,
+  rangeHeader: string | null | undefined,
+  confirm?: string,
+  cookieHeader?: string
+): Promise<Response> {
+  const headers: HeadersInit = {
+    "User-Agent": BROWSER_UA,
+    Accept: "*/*",
+  };
+  if (rangeHeader) headers.Range = rangeHeader;
+  if (cookieHeader) headers.Cookie = cookieHeader;
+
+  return fetch(driveDownloadUrl(fileId, confirm), {
+    headers,
+    redirect: "follow",
+  });
+}
+
 export async function fetchPublicDriveStream(
   fileIdOrUrl: string,
   rangeHeader?: string | null
 ): Promise<Response> {
   const fileId = extractGoogleDriveFileId(fileIdOrUrl) ?? fileIdOrUrl;
-  const headers: HeadersInit = {
-    "User-Agent":
-      "Mozilla/5.0 (compatible; CFA-Study-LMS/1.0; +https://localhost)",
-  };
-  if (rangeHeader) {
-    headers.Range = rangeHeader;
-  }
 
-  let response = await fetch(driveDownloadUrl(fileId), {
-    headers,
-    redirect: "follow",
-  });
-
-  const contentType = response.headers.get("content-type") ?? "";
-  const setCookie = response.headers.get("set-cookie");
+  let response = await fetchDriveOnce(fileId, rangeHeader, "t");
+  let contentType = response.headers.get("content-type") ?? "";
+  let setCookie = response.headers.get("set-cookie");
 
   if (contentType.includes("text/html")) {
     const html = await response.text();
-    const confirm = extractConfirmToken(html);
+    const confirm = extractConfirmToken(html) ?? "t";
     const cookieHeader = parseCookies(setCookie);
+    response = await fetchDriveOnce(
+      fileId,
+      rangeHeader,
+      confirm,
+      cookieHeader || undefined
+    );
+    contentType = response.headers.get("content-type") ?? "";
+  }
 
-    if (!confirm && !cookieHeader) {
-      throw new Error(
-        "Could not access this Drive file. Make sure it is shared as Anyone with the link → Viewer."
+  if (!response.ok && response.status !== 206) {
+    response = await fetchDriveOnce(fileId, rangeHeader);
+    contentType = response.headers.get("content-type") ?? "";
+    setCookie = response.headers.get("set-cookie");
+
+    if (contentType.includes("text/html")) {
+      const html = await response.text();
+      const confirm = extractConfirmToken(html) ?? "t";
+      const cookieHeader = parseCookies(setCookie);
+      response = await fetchDriveOnce(
+        fileId,
+        rangeHeader,
+        confirm,
+        cookieHeader || undefined
       );
+      contentType = response.headers.get("content-type") ?? "";
     }
-
-    const nextHeaders: HeadersInit = {
-      ...headers,
-      ...(cookieHeader ? { Cookie: cookieHeader } : {}),
-    };
-
-    response = await fetch(driveDownloadUrl(fileId, confirm ?? "t"), {
-      headers: nextHeaders,
-      redirect: "follow",
-    });
   }
 
   if (!response.ok && response.status !== 206) {
     throw new Error(
-      `Drive download failed (${response.status}). Check the file is shared publicly.`
+      `Drive download failed (${response.status}). Check the file is shared as Anyone with the link → Viewer.`
     );
   }
 
   const finalType = response.headers.get("content-type") ?? "";
   if (finalType.includes("text/html")) {
     throw new Error(
-      "Google Drive blocked direct download for this file. Use preview mode or re-check sharing settings."
+      "Google Drive blocked direct media access for this file. Re-check sharing settings."
     );
   }
 

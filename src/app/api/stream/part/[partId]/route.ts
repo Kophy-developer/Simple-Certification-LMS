@@ -32,11 +32,14 @@ export async function GET(
       rangeHeader
     );
 
+    const upstreamType = driveResponse.headers.get("content-type") ?? "";
+    const contentType =
+      upstreamType.includes("video") || upstreamType.includes("mp4")
+        ? upstreamType
+        : "video/mp4";
+
     const headers = new Headers();
-    headers.set(
-      "Content-Type",
-      driveResponse.headers.get("content-type") ?? "video/mp4"
-    );
+    headers.set("Content-Type", contentType);
     headers.set("Accept-Ranges", "bytes");
     headers.set("Cache-Control", "private, max-age=0");
 
