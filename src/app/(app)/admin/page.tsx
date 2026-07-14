@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Plus, Users, FolderOpen, ListVideo, BarChart3 } from "lucide-react";
+import { Plus, Users, FolderOpen, ListVideo, BarChart3, FileText } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { LinkButton } from "@/components/link-button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -45,6 +45,12 @@ export default async function AdminDashboardPage() {
       label: "Manage Topics",
       description: "Organize CFA curriculum areas",
       icon: FolderOpen,
+    },
+    {
+      href: "/admin/materials",
+      label: "Topic PDFs",
+      description: "Upload notes by topic and year",
+      icon: FileText,
     },
     {
       href: "/admin/students",

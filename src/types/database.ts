@@ -79,3 +79,19 @@ export interface Progress {
 export interface ProgressWithLesson extends Progress {
   lessons: LessonWithTopic | null;
 }
+
+export interface Material {
+  id: string;
+  topic_id: string;
+  year: number;
+  title: string;
+  file_path: string;
+  file_name: string;
+  file_size: number | null;
+  created_by: string;
+  created_at: string;
+}
+
+export interface MaterialWithTopic extends Material {
+  topics: Pick<Topic, "id" | "name"> | null;
+}
